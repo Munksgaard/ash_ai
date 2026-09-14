@@ -53,6 +53,20 @@ defmodule AshAi.Dsl do
       doc:
         "A list of action specific parameters to allow for the underlying action. Only relevant for reads, and defaults to allowing `[:sort, :offset, :limit, :result_type, :filter]`"
     ],
+    pagination?: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Return a counted pagination envelope for read queries instead of a bare array.
+      Requires a non-single-result read action with countable offset pagination, and
+      the `:limit` and `:offset` action parameters must be exposed.
+
+      The JSON result contains `results`, `fetched_count`, `total_count`, `has_more`,
+      and `next_offset` (null on the last page). The raw result remains a list of records.
+      Count, exists, and aggregate results are unchanged. Defaults to `false` for
+      backwards compatibility.
+      """
+    ],
     load: [
       type: :any,
       default: [],

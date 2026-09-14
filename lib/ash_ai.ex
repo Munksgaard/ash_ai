@@ -17,7 +17,7 @@ defmodule AshAi do
     sections: AshAi.Dsl.sections(),
     imports: [AshAi.Actions],
     transformers: [AshAi.Transformers.Vectorize],
-    verifiers: [AshAi.Verifiers.McpResourceActionsReturnString]
+    verifiers: [AshAi.Verifiers.McpResourceActionsReturnString, AshAi.Verifiers.ToolPagination]
 
   defmodule Tool do
     @moduledoc "An action exposed to LLM agents"
@@ -33,6 +33,7 @@ defmodule AshAi do
       :action_parameters,
       :arguments,
       :_meta,
+      pagination?: false,
       __spark_metadata__: nil
     ]
 

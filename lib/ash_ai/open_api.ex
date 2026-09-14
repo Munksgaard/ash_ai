@@ -98,7 +98,9 @@ defmodule AshAi.OpenApi do
           }
           |> Map.put(:description, config[:description] || nil)
 
-        resource_write_attribute_type(fake_attr, resource, action_type)
+        fake_attr
+        |> resource_write_attribute_type(resource, action_type)
+        |> with_union_type_tag(config)
       end)
 
     %{
@@ -149,6 +151,30 @@ defmodule AshAi.OpenApi do
     end
     |> with_attribute_description(attr)
   end
+
+  # For a `:map_with_tag` union member, add the storage tag as a required
+  # constant property. Without it the generated `anyOf` branches carry only the
+  # member's own fields, so (a) field-less members collapse to identical empty
+  # objects and (b) the input can't be cast — Ash reads the tag from the
+  # submitted map to pick the member. Untagged (`:type_and_value`) members, and
+  # non-object members with no `:properties` to attach a tag to, are unchanged.
+  defp with_union_type_tag(%{properties: properties} = subtype, config) do
+    case config[:tag] do
+      nil ->
+        subtype
+
+      tag ->
+        value = to_string(config[:tag_value] || tag)
+
+        %{
+          subtype
+          | properties: Map.put(properties, tag, %{type: :string, enum: [value]}),
+            required: Enum.uniq([tag | Map.get(subtype, :required, [])])
+        }
+    end
+  end
+
+  defp with_union_type_tag(subtype, _config), do: subtype
 
   defp add_null_for_non_required(%{required: required} = schema)
        when is_list(required) do
