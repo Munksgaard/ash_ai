@@ -185,6 +185,52 @@ end
 Expose these actions as tools. When you call `AshAi.setup_ash_ai(chain, opts)`, or `AshAi.iex_chat/2`
 it will add those as tool calls to the agent.
 
+### Counted pagination for read tools
+
+Read tools return a bare JSON array by default, limited to 25 records unless a
+limit is supplied or the read action configures a default page size. To make
+partial results explicit, opt into a pagination envelope:
+
+```elixir
+tools do
+  tool :read_posts, MyApp.Blog.Post, :read do
+    pagination? true
+  end
+end
+```
+
+This uses native Ash offset pagination with `count: true`. The action must be a
+non-single-result read supporting offset pagination and counting. Default read
+actions on data layers that support counting already have this configuration.
+For a custom read action, configure `pagination offset?: true, countable: true`.
+If restricting `action_parameters`, keep both `:limit` and `:offset` exposed.
+
+The `run_query` JSON result changes from an array to an object:
+
+```json
+{
+  "results": [{"id": "..."}],
+  "fetched_count": 1,
+  "total_count": 42,
+  "has_more": true,
+  "next_offset": 1
+}
+```
+
+`fetched_count` is the number of records on this page. `total_count` counts all
+matching records within the action's constraints, filters, authorization and
+tenant, independently of the tool's page limit and offset. `next_offset` is null
+when `has_more` is false. To continue, use `next_offset` as the next call's `offset`,
+keeping the same input, filters, sort, and limit. These instructions are also
+appended to the tool description exposed to the LLM.
+
+The existing default of 25 and the action's page-size settings still apply.
+Ash handles counting internally, generally with an additional database query;
+counts and pages are not guaranteed to share a snapshot during concurrent writes.
+Count, exists, and aggregate operations are unchanged, as is the raw record list
+in `AshAi.Tools.execute/3`'s `{:ok, json, records}` tuple. Tools without
+`pagination? true` retain their existing output contract.
+
 ## Expose content as MCP resources
 
 MCP resources provide LLMs with access to static or dynamic content like UI components, data files, or images. Unlike tools which perform actions, resources return content that the LLM can read and reference.

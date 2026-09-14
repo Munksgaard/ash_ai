@@ -11,6 +11,7 @@ Documentation for `AshAi`.
 
 ### Nested DSLs
  * [tool](#tools-tool)
+   * argument
 
 
 
@@ -29,6 +30,8 @@ Only public attributes can be used for filtering, sorting, and aggregation, but 
 option allows including private attributes in the response data.
 
 
+### Nested DSLs
+ * [argument](#tools-tool-argument)
 
 
 ### Examples
@@ -62,12 +65,48 @@ tool :get_board, Board, :read, _meta: %{"openai/outputTemplate" => "ui://widget/
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`action_parameters`](#tools-tool-action_parameters){: #tools-tool-action_parameters } | `list(atom)` |  | A list of action specific parameters to allow for the underlying action. Only relevant for reads, and defaults to allowing `[:sort, :offset, :limit, :result_type, :filter]` |
-| [`load`](#tools-tool-load){: #tools-tool-load } | `any` | `[]` | A list of relationships and calculations to load on the returned records. Note that loaded fields can include private attributes, which will then be included in the tool's response. However, private attributes cannot be used for filtering, sorting, or aggregation. |
+| [`pagination?`](#tools-tool-pagination?){: #tools-tool-pagination? } | `boolean` | `false` | Return a counted pagination envelope for read queries instead of a bare array. Requires a non-single-result read action with countable offset pagination, and the `:limit` and `:offset` action parameters must be exposed. The JSON result contains `results`, `fetched_count`, `total_count`, `has_more`, and `next_offset` (null on the last page). The raw result remains a list of records. Count, exists, and aggregate results are unchanged. Defaults to `false` for backwards compatibility. |
+| [`load`](#tools-tool-load){: #tools-tool-load } | `any` | `[]` | A list of relationships and calculations to load, or an anonymous function/1. Note that loaded fields can include private attributes, which will then be included in the tool's response. However, private attributes cannot be used for filtering, sorting, or aggregation. If a function is provided, it will be called with the tool input (a Map with **String keys**) and must return the final load list. ## Example load fn input ->   [schedule: [date: input["date"]]] # Use string keys! end |
 | [`async`](#tools-tool-async){: #tools-tool-async } | `boolean` | `true` |  |
 | [`description`](#tools-tool-description){: #tools-tool-description } | `String.t` |  | A description for the tool. Defaults to the action's description. |
 | [`identity`](#tools-tool-identity){: #tools-tool-identity } | `atom` |  | The identity to use for update/destroy actions. Defaults to the primary key. Set to `false` to disable entirely. |
 | [`_meta`](#tools-tool-_meta){: #tools-tool-_meta } | `any` | `%{}` | Optional metadata map for tool integrations. Supports provider-specific extensions like OpenAI metadata. Keys and values should be strings to comply with JSON-RPC serialization. |
 
+
+### tools.tool.argument
+```elixir
+argument name, type
+```
+
+
+An argument to be passed to the tool.
+
+
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#tools-tool-argument-name){: #tools-tool-argument-name .spark-required} | `atom` |  | The name of the argument. |
+| [`type`](#tools-tool-argument-type){: #tools-tool-argument-type .spark-required} | `any` |  | The Ash type of the argument (e.g., :string, :date, :integer). |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`constraints`](#tools-tool-argument-constraints){: #tools-tool-argument-constraints } | `keyword` | `[]` | Type constraints (e.g., [max_length: 10]). These are converted to JSON Schema rules. |
+| [`description`](#tools-tool-argument-description){: #tools-tool-argument-description } | `String.t` |  | A description for the Agent. |
+| [`allow_nil?`](#tools-tool-argument-allow_nil?){: #tools-tool-argument-allow_nil? } | `boolean` | `true` | If set to `false`, the argument is marked as required in the generated JSON Schema. |
+| [`default`](#tools-tool-argument-default){: #tools-tool-argument-default } | `any` |  | The default value if not provided. |
+
+
+
+
+
+### Introspection
+
+Target: `AshAi.Tool.Argument`
 
 
 

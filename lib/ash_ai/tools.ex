@@ -34,6 +34,17 @@ defmodule AshAi.Tools do
           "Call the #{action.name} action on the #{inspect(resource)} resource"
       )
 
+    description =
+      if tool.pagination? do
+        description <>
+          "\n\nFor run_query, returns an object with results, fetched_count (this page), " <>
+          "total_count (all matching records), has_more, and next_offset (null on the last page). " <>
+          "When has_more is true, call again with offset set to next_offset and the same " <>
+          "filter, sort, input, and limit to fetch the remaining records."
+      else
+        description
+      end
+
     parameter_schema = parameter_schema(tool)
 
     LangChain.Function.new!(%{
@@ -54,7 +65,8 @@ defmodule AshAi.Tools do
           action: action,
           load: load,
           identity: identity,
-          arguments: tool_arguments
+          arguments: tool_arguments,
+          pagination?: pagination?
         },
         client_arguments,
         context
@@ -132,9 +144,20 @@ defmodule AshAi.Tools do
                   25
               end
 
+            result_type = arguments["result_type"] || "run_query"
+            paginate? = pagination? and result_type == "run_query"
+
             resource
-            |> Ash.Query.limit(limit)
-            |> Ash.Query.offset(arguments["offset"])
+            |> Ash.Query.new()
+            |> then(fn query ->
+              if paginate? do
+                query
+              else
+                query
+                |> Ash.Query.limit(limit)
+                |> Ash.Query.offset(arguments["offset"])
+              end
+            end)
             |> then(fn query ->
               if sort != "" do
                 Ash.Query.sort_input(query, sort)
@@ -151,12 +174,10 @@ defmodule AshAi.Tools do
             end)
             |> Ash.Query.for_read(action.name, input, opts)
             |> then(fn query ->
-              result_type = arguments["result_type"] || "run_query"
-
               case result_type do
                 "run_query" ->
                   query
-                  |> Ash.Actions.Read.unpaginated_read(action, load: resolved_load)
+                  |> read_query(action, resolved_load, paginate?, limit, arguments["offset"])
                   |> case do
                     {:ok, value} ->
                       value
@@ -164,14 +185,7 @@ defmodule AshAi.Tools do
                     {:error, error} ->
                       raise Ash.Error.to_error_class(error)
                   end
-                  |> then(fn result ->
-                    result
-                    |> AshAi.Serializer.serialize_value({:array, resource}, [], domain,
-                      load: resolved_load
-                    )
-                    |> Jason.encode!()
-                    |> then(&{:ok, &1, result})
-                  end)
+                  |> serialize_read_result(resource, domain, resolved_load)
 
                 "count" ->
                   query
@@ -366,6 +380,40 @@ defmodule AshAi.Tools do
     result
   end
 
+  defp read_query(query, _action, load, true, limit, offset) do
+    Ash.read(query, load: load, page: [limit: limit, offset: offset || 0, count: true])
+  end
+
+  defp read_query(query, action, load, false, _limit, _offset) do
+    Ash.Actions.Read.unpaginated_read(query, action, load: load)
+  end
+
+  defp serialize_read_result(%Ash.Page.Offset{} = page, resource, domain, load) do
+    results =
+      AshAi.Serializer.serialize_value(page.results, {:array, resource}, [], domain, load: load)
+
+    fetched_count = length(page.results)
+
+    envelope = %{
+      results: results,
+      fetched_count: fetched_count,
+      total_count: page.count,
+      has_more: page.more?,
+      next_offset: if(page.more?, do: page.offset + fetched_count, else: nil)
+    }
+
+    {:ok, Jason.encode!(envelope), page.results}
+  end
+
+  defp serialize_read_result(result, resource, domain, load) do
+    json =
+      result
+      |> AshAi.Serializer.serialize_value({:array, resource}, [], domain, load: load)
+      |> Jason.encode!()
+
+    {:ok, json, result}
+  end
+
   defp serialize_errors(errors) do
     errors
     |> List.wrap()
@@ -532,7 +580,7 @@ defmodule AshAi.Tools do
         oneOf: [
           %{
             description:
-              "Run the query returning all results, or return a count of results, or check if any results exist",
+              "Run the query returning results, or return a count of results, or check if any results exist",
             enum: [
               "run_query",
               "count",
